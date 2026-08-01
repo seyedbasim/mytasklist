@@ -12,3 +12,6 @@ __tablestorage__/
 
 *.log
 .DS_Store
+
+# Local zip-deploy build artifact (see README manual deploy steps)
+deploy.zip

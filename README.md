@@ -116,7 +116,7 @@ These steps use the Azure CLI and provision the cheapest reasonable setup: a **B
 ```bash
 # Variables — adjust as you like
 RESOURCE_GROUP="task-list-rg"
-LOCATION="eastus"
+LOCATION="southeastasia"
 STORAGE_ACCOUNT="tasklistdata$RANDOM"   # must be globally unique, lowercase, no dashes
 APP_PLAN="task-list-plan"
 APP_NAME="my-task-lists-$RANDOM"        # must be globally unique — this becomes <name>.azurewebsites.net
@@ -145,24 +145,27 @@ az appservice plan create \
   --sku B1 \
   --is-linux
 
-# 4. Web app, Node 20 runtime
+# 4. Web app, Node 22 runtime
 az webapp create \
   --name $APP_NAME \
   --resource-group $RESOURCE_GROUP \
   --plan $APP_PLAN \
-  --runtime "NODE:20-lts"
+  --runtime "NODE:22-lts"
 
 # 5. App settings (secrets/config)
+# NOTE: replace the APP_PASSWORD value below with your own — don't deploy this literal placeholder.
+# SCM_DO_BUILD_DURING_DEPLOYMENT=true tells Azure to run `npm install` on the server during deploy,
+# since the zip we upload deliberately excludes node_modules.
 az webapp config appsettings set \
   --name $APP_NAME \
   --resource-group $RESOURCE_GROUP \
   --settings \
     NODE_ENV=production \
-    APP_PASSWORD="choose-a-strong-password" \
+    APP_PASSWORD="$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)" \
     SESSION_SECRET="$(openssl rand -hex 32)" \
     AZURE_STORAGE_CONNECTION_STRING="$STORAGE_CONN" \
     AZURE_TABLE_NAME="Tasks" \
-    WEBSITE_RUN_FROM_PACKAGE=1
+    SCM_DO_BUILD_DURING_DEPLOYMENT=true
 
 # 6. Make sure the app is always running (not available on the Free tier)
 az webapp config set \
@@ -171,24 +174,28 @@ az webapp config set \
   --always-on true
 
 # 7. Deploy the code (zip deploy)
-zip -r deploy.zip . -x "node_modules/*" ".git/*" ".azurite/*"
-az webapp deploy \
+# Use `config-zip`, not `az webapp deploy --type zip` — the latter silently skips the build
+# step ("Run-From-Zip") even with SCM_DO_BUILD_DURING_DEPLOYMENT set, which deploys a broken
+# app with no node_modules and fails to start after a ~10 minute timeout.
+zip -r deploy.zip . -x "node_modules/*" ".git/*" ".azurite/*" "deploy.zip"
+az webapp deployment source config-zip \
   --name $APP_NAME \
   --resource-group $RESOURCE_GROUP \
-  --src-path deploy.zip \
-  --type zip
+  --src deploy.zip
 ```
 
-Your app will be live at `https://<APP_NAME>.azurewebsites.net`.
+Your app will be live at `https://<APP_NAME>.azurewebsites.net`. To retrieve the password you just generated: `az webapp config appsettings list --name $APP_NAME --resource-group $RESOURCE_GROUP --query "[?name=='APP_PASSWORD'].value" -o tsv`.
 
 **Using the Free (F1) tier instead:** replace `--sku B1` with `--sku F1` in step 3. The Free tier has no cost but doesn't support "Always On" (skip step 6), gives you 60 CPU-minutes/day, and the app may idle and cold-start after inactivity. It's fine for trying things out, but for daily real use B1 is worth the ~$13/month for reliability.
 
 **Redeploying after code changes:**
 
 ```bash
-zip -r deploy.zip . -x "node_modules/*" ".git/*" ".azurite/*"
-az webapp deploy --name $APP_NAME --resource-group $RESOURCE_GROUP --src-path deploy.zip --type zip
+zip -r deploy.zip . -x "node_modules/*" ".git/*" ".azurite/*" "deploy.zip"
+az webapp deployment source config-zip --name $APP_NAME --resource-group $RESOURCE_GROUP --src deploy.zip
 ```
+
+If app settings changes (e.g. rotating `APP_PASSWORD`) don't seem to take effect immediately, run `az webapp restart --name $APP_NAME --resource-group $RESOURCE_GROUP` — propagation to the running process can lag a few seconds to a minute behind the `appsettings set` call returning.
 
 **Optional: GitHub Actions CI/CD** — `.github/workflows/azure-deploy.yml` is included. Download the publish profile (`az webapp deployment list-publishing-profiles --name $APP_NAME --resource-group $RESOURCE_GROUP --xml`), add it as a GitHub secret named `AZURE_WEBAPP_PUBLISH_PROFILE`, set `AZURE_WEBAPP_NAME` in the workflow file, and push to `main` to auto-deploy.
 
@@ -215,6 +222,9 @@ So a realistic total is **~$13/month** on B1 (mainly the compute), or **effectiv
 - **"Server is missing APP_PASSWORD configuration"** — the `APP_PASSWORD` app setting isn't set. Check App Service → Configuration → Application settings.
 - **App won't start / shows the default Azure placeholder page** — check **Log stream** in the Azure Portal (App Service → Monitoring → Log stream) for startup errors, and confirm the Node runtime version matches `engines.node` in `package.json`.
 - **Tasks don't save / 500 errors from `/api/tasks`** — usually means `AZURE_STORAGE_CONNECTION_STRING` is missing or wrong. Double-check it was copied from the correct Storage Account.
+- **"Deployment failed because the site failed to start within 10 mins" after a zip deploy** — you deployed with `az webapp deploy --type zip`, which (as of this writing) skips the Oryx build step entirely regardless of `SCM_DO_BUILD_DURING_DEPLOYMENT`, uploading a package with no `node_modules`. Use `az webapp deployment source config-zip` instead (see [Deploying to Azure](#deploying-to-azure)) — check `az webapp log deployment show -n <APP_NAME> -g <RESOURCE_GROUP>` for a `"Running oryx build..."` line to confirm the build actually ran.
+- **Downloading the publish profile fails with a Basic Authentication error** — newer App Services disable SCM/FTP Basic Auth by default. Re-enable it under App Service → Configuration → General settings → "SCM Basic Auth Publishing Credentials" (and FTP if needed), or switch the GitHub Actions workflow to OIDC/federated credentials instead.
+- **Changed an app setting (e.g. `APP_PASSWORD`) but the old value still seems active** — propagation to the running process can lag behind the `az webapp config appsettings set` call by anywhere from a few seconds to about a minute. Run `az webapp restart` and wait for `/api/session` to respond before retrying.
 - **Cold starts on the Free (F1) tier** — expected; upgrade to B1 and enable Always On if this is a problem.
 
 ## Possible future improvements
