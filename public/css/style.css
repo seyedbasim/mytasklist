@@ -26,6 +26,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 14px 24px;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
@@ -215,13 +217,18 @@ button {
 }
 
 /* Excel-style table */
-.task-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: var(--bg);
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid var(--border);
   border-radius: 8px;
-  overflow: hidden;
+}
+
+.task-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  background: var(--bg);
 }
 
 .task-table th,
@@ -334,7 +341,8 @@ tfoot.add-row,
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100vh;
+  min-height: 100vh;
+  padding: 16px;
 }
 
 .login-card {
@@ -342,7 +350,8 @@ tfoot.add-row,
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 32px;
-  width: 320px;
+  width: 100%;
+  max-width: 320px;
   text-align: center;
 }
 
@@ -452,6 +461,15 @@ tfoot.add-row,
     margin-left: 0;
     width: 100%;
   }
+  .container {
+    padding: 14px;
+  }
+  .nav {
+    padding: 12px 14px;
+  }
+  .nav-links {
+    gap: 12px;
+  }
 }
 
 /* Labels */
@@ -557,7 +575,8 @@ tfoot.add-row,
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 13px;
-  width: 160px;
+  flex: 1 1 160px;
+  min-width: 0;
 }
 
 .color-swatches {

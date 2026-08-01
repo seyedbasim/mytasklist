@@ -33,27 +33,29 @@
       </div>
     </div>
 
-    <table class="task-table">
-      <thead>
-        <tr>
-          <th class="col-check"></th>
-          <th class="col-label">Label</th>
-          <th class="col-time">Time</th>
-          <th class="col-title">Task</th>
-          <th class="col-actions"></th>
-        </tr>
-      </thead>
-      <tbody id="task-rows"></tbody>
-      <tfoot>
-        <tr class="add-row">
-          <td class="col-check"></td>
-          <td class="col-label"><select id="new-label"></select></td>
-          <td class="col-time"><input type="time" id="new-time" /></td>
-          <td class="col-title"><input type="text" id="new-title" placeholder="Add a task and press Enter…" /></td>
-          <td class="col-actions"><button id="add-btn" class="primary-btn">Add</button></td>
-        </tr>
-      </tfoot>
-    </table>
+    <div class="table-scroll">
+      <table class="task-table">
+        <thead>
+          <tr>
+            <th class="col-check"></th>
+            <th class="col-label">Label</th>
+            <th class="col-time">Time</th>
+            <th class="col-title">Task</th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+        <tbody id="task-rows"></tbody>
+        <tfoot>
+          <tr class="add-row">
+            <td class="col-check"></td>
+            <td class="col-label"><select id="new-label"></select></td>
+            <td class="col-time"><input type="time" id="new-time" /></td>
+            <td class="col-title"><input type="text" id="new-title" placeholder="Add a task and press Enter…" /></td>
+            <td class="col-actions"><button id="add-btn" class="primary-btn">Add</button></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
     <p id="empty-state" class="empty-state" hidden>No tasks for this day yet.</p>
   </main>
   <script src="/js/common.js"></script>
