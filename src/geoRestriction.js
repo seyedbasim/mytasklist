@@ -1,6 +1,11 @@
 const ALLOWED_COUNTRY = process.env.ALLOWED_COUNTRY_CODE || 'SG';
+const IPINFO_TOKEN = process.env.IPINFO_TOKEN;
 const LOOKUP_TIMEOUT_MS = 5000;
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — keeps repeat requests from the same IP fast and avoids the free lookup service's rate limit.
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — keeps repeat requests from the same IP fast and light on the lookup service's quota.
+
+if (!IPINFO_TOKEN) {
+  console.warn('IPINFO_TOKEN is not set. The geo restriction check will fail closed on every request.');
+}
 
 const cache = new Map(); // ip -> { country, expiresAt }
 
@@ -17,17 +22,22 @@ function isPrivateIp(ip) {
 }
 
 async function fetchCountry(ip) {
+  if (!IPINFO_TOKEN) throw new Error('IPINFO_TOKEN is not configured');
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LOOKUP_TIMEOUT_MS);
   try {
-    const res = await fetch(`http://ip-api.com/json/${ip}?fields=status,countryCode`, {
+    const res = await fetch(`https://ipinfo.io/${ip}?token=${IPINFO_TOKEN}`, {
       signal: controller.signal,
     });
+    if (!res.ok) {
+      throw new Error(`ipinfo.io returned HTTP ${res.status}`);
+    }
     const data = await res.json();
-    if (data.status !== 'success' || !data.countryCode) {
+    if (!data.country) {
       throw new Error(`Geo lookup did not return a country (response: ${JSON.stringify(data)})`);
     }
-    return data.countryCode;
+    return data.country;
   } finally {
     clearTimeout(timeout);
   }

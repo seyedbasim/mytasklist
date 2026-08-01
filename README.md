@@ -121,6 +121,7 @@ Azurite emulates Azure Table Storage locally, so nothing is created in your real
 | `WEBAUTHN_RP_ID` | **Must exactly match the domain serving the app** (no `https://`, no path) | `tasks.seyedbasim.net` |
 | `WEBAUTHN_ORIGIN` | **Must exactly match the full origin** the app is served from | `https://tasks.seyedbasim.net` |
 | `ALLOWED_COUNTRY_CODE` | ISO country code the app is restricted to (whole site, every request) | `SG` |
+| `IPINFO_TOKEN` | Free account token from [ipinfo.io](https://ipinfo.io/signup) used for the region check | see [Region restriction](#region-restriction) |
 | `DISABLE_GEO_RESTRICTION` | Emergency bypass for the region restriction — see [Region restriction](#region-restriction) | `false` |
 
 In Azure, set these under **App Service → Configuration → Application settings** rather than committing a `.env` file.
@@ -298,9 +299,11 @@ Then sign in with `APP_PASSWORD` and register a new passkey as above.
 
 ## Region restriction
 
-The entire app — every page and API route, including the login page itself — is blocked for any request whose IP doesn't geolocate to `ALLOWED_COUNTRY_CODE` (Singapore, `SG`, by default). This runs as the very first thing on every request, before auth, before static files, before anything else. It uses the free [ip-api.com](https://ip-api.com/) lookup service (no cost, no API key, no extra Azure resource), with results cached per IP for an hour to keep it fast and stay well under that service's free-tier rate limit.
+The entire app — every page and API route, including the login page itself — is blocked for any request whose IP doesn't geolocate to `ALLOWED_COUNTRY_CODE` (Singapore, `SG`, by default). This runs as the very first thing on every request, before auth, before static files, before anything else. It uses [ipinfo.io](https://ipinfo.io/) (free tier, 50k lookups/month, requires a free account token — see `IPINFO_TOKEN` above), with results cached per IP for an hour to keep it fast and light on the quota.
 
-**This fails closed**: if the lookup service is unreachable, times out, or errors for any reason, the request is blocked, not allowed through. That's a deliberate choice for stronger security, but it means a third-party outage — something outside your control — could lock you out of your own app.
+A keyless service ([ip-api.com](https://ip-api.com/)) was tried first, since it needs no signup at all. It worked in initial testing but started failing consistently within hours of going live in production — Azure App Service on a Basic plan shares its outbound IP with many other customers, and that free service rate-limits *per source IP*, so other tenants' traffic on the same shared IP exhausted the quota for everyone using it, including us. A token-based service avoids this because the quota is tied to the account, not the calling IP.
+
+**This fails closed**: if the lookup service is unreachable, times out, or errors for any reason (including a missing/invalid `IPINFO_TOKEN`), the request is blocked, not allowed through, after one retry. That's a deliberate choice for stronger security, but it means an outage of a third-party service — something outside your control — could lock you out of your own app. This already happened once during development (see above); if you'd rather trade some strictness for guaranteed availability, the fail-open behavior in `src/geoRestriction.js`'s catch block is a one-line change (`next()` instead of blocking).
 
 **Emergency bypass**: if you're ever blocked when you shouldn't be (travelling, a VPN, the lookup service having issues, or your IP being geolocated incorrectly), you can always still reach the [Azure Portal](https://portal.azure.com) from anywhere in the world — the region restriction only applies to *this app*, never to Azure's own management surface. From there:
 
