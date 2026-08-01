@@ -7,6 +7,7 @@ const session = require('express-session');
 
 const { requireAuth, requireAuthPage } = require('./src/auth');
 const { ensureTableExists } = require('./src/storage');
+const { requireAllowedRegion } = require('./src/geoRestriction');
 const authRoutes = require('./src/routes/auth');
 const taskRoutes = require('./src/routes/tasks');
 const dashboardRoutes = require('./src/routes/dashboard');
@@ -18,6 +19,9 @@ const PORT = process.env.PORT || 8080;
 
 // Azure App Service sits behind a reverse proxy; needed for secure cookies to work.
 app.set('trust proxy', 1);
+
+// Blocks the entire app for requests outside the allowed region, before anything else runs.
+app.use(requireAllowedRegion);
 
 app.use(
   helmet({
