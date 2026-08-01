@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -o /dev/null -w \"css: %{http_code}\\\\n\" http://localhost:8080/css/style.css)",
+      "Bash(curl -s -o /dev/null -w \"app.js: %{http_code}\\\\n\" http://localhost:8080/js/app.js)",
+      "Bash(curl -s -o /dev/null -w \"dashboard.js: %{http_code}\\\\n\" http://localhost:8080/js/dashboard.js)",
+      "Bash(pkill -f \"node server.js\")",
+      "Bash(pkill -f azurite)"
+    ]
+  }
+}

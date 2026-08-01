@@ -1,0 +1,27 @@
+{
+  "name": "my-task-lists",
+  "version": "1.0.0",
+  "description": "A daily, Excel-style task list web app with a progress dashboard, backed by Azure Table Storage.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "storage:emulator": "azurite --silent --location .azurite --debug .azurite/debug.log"
+  },
+  "dependencies": {
+    "@azure/data-tables": "^13.2.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "express-session": "^1.18.0",
+    "helmet": "^7.1.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "azurite": "^3.30.0",
+    "nodemon": "^3.1.4"
+  }
+}

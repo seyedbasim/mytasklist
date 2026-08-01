@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tasks — Task List</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <main class="container">
+    <div class="day-header">
+      <button id="prev-day" class="icon-btn" title="Previous day">&larr;</button>
+      <input type="date" id="date-picker" />
+      <button id="next-day" class="icon-btn" title="Next day">&rarr;</button>
+      <button id="today-btn" class="secondary-btn">Today</button>
+      <div class="day-progress">
+        <span id="progress-text">0 / 0 done</span>
+        <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+      </div>
+    </div>
+
+    <table class="task-table">
+      <thead>
+        <tr>
+          <th class="col-check"></th>
+          <th class="col-time">Time</th>
+          <th class="col-title">Task</th>
+          <th class="col-actions"></th>
+        </tr>
+      </thead>
+      <tbody id="task-rows"></tbody>
+      <tfoot>
+        <tr class="add-row">
+          <td class="col-check"></td>
+          <td class="col-time"><input type="time" id="new-time" /></td>
+          <td class="col-title"><input type="text" id="new-title" placeholder="Add a task and press Enter…" /></td>
+          <td class="col-actions"><button id="add-btn" class="primary-btn">Add</button></td>
+        </tr>
+      </tfoot>
+    </table>
+    <p id="empty-state" class="empty-state" hidden>No tasks for this day yet.</p>
+  </main>
+  <script src="/js/common.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

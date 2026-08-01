@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.local
+npm-debug.log*
+
+# Azurite local storage emulator files
+.azurite/
+__azurite_db*__.json
+__blobstorage__/
+__queuestorage__/
+__tablestorage__/
+
+*.log
+.DS_Store
