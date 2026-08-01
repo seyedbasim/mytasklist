@@ -87,7 +87,11 @@ async function updateTask(date, id, updates) {
 }
 
 async function deleteTask(date, id) {
-  await tableClient.deleteEntity(date, id);
+  try {
+    await tableClient.deleteEntity(date, id);
+  } catch (err) {
+    if (err.statusCode !== 404) throw err;
+  }
 }
 
 module.exports = {
