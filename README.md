@@ -18,10 +18,11 @@ A simple, spreadsheet-style daily task list web app with a progress dashboard, b
 4. [Local development](#local-development)
 5. [Environment variables](#environment-variables)
 6. [Deploying to Azure](#deploying-to-azure)
-7. [Cost estimate](#cost-estimate)
-8. [Security notes](#security-notes)
-9. [Troubleshooting](#troubleshooting)
-10. [Possible future improvements](#possible-future-improvements)
+7. [Custom domain & HTTPS](#custom-domain--https)
+8. [Cost estimate](#cost-estimate)
+9. [Security notes](#security-notes)
+10. [Troubleshooting](#troubleshooting)
+11. [Possible future improvements](#possible-future-improvements)
 
 ---
 
@@ -197,7 +198,58 @@ az webapp deployment source config-zip --name $APP_NAME --resource-group $RESOUR
 
 If app settings changes (e.g. rotating `APP_PASSWORD`) don't seem to take effect immediately, run `az webapp restart --name $APP_NAME --resource-group $RESOURCE_GROUP` — propagation to the running process can lag a few seconds to a minute behind the `appsettings set` call returning.
 
-**Optional: GitHub Actions CI/CD** — `.github/workflows/azure-deploy.yml` is included. Download the publish profile (`az webapp deployment list-publishing-profiles --name $APP_NAME --resource-group $RESOURCE_GROUP --xml`), add it as a GitHub secret named `AZURE_WEBAPP_PUBLISH_PROFILE`, set `AZURE_WEBAPP_NAME` in the workflow file, and push to `main` to auto-deploy.
+**Optional: GitHub Actions CI/CD** — `.github/workflows/azure-deploy.yml` is included. Download the publish profile (`az webapp deployment list-publishing-profiles --name $APP_NAME --resource-group $RESOURCE_GROUP --xml`), add it as a GitHub secret named `AZURE_WEBAPP_PUBLISH_PROFILE`, set `AZURE_WEBAPP_NAME` in the workflow file, and push to `main` to auto-deploy. If downloading the publish profile fails with a Basic Authentication error, see [Troubleshooting](#troubleshooting).
+
+## Custom domain & HTTPS
+
+App Service can front the app with your own domain and a **free, auto-renewing TLS certificate** (Azure's App Service Managed Certificate — issued by DigiCert, functionally equivalent to what you'd get from Let's Encrypt, but Azure handles renewal for you). This requires the Basic (B1) tier or higher; it's not available on Free (F1).
+
+```bash
+HOSTNAME="tasks.example.com"   # replace with your subdomain
+
+# 1. Get the verification ID and default hostname you'll need for DNS records
+az webapp show --name $APP_NAME --resource-group $RESOURCE_GROUP \
+  --query "{verificationId:customDomainVerificationId, defaultHostName:defaultHostName}" -o json
+```
+
+At your DNS provider, add two records for your domain (using the values from step 1):
+
+| Type | Name | Value |
+|---|---|---|
+| TXT | `asuid.<subdomain>` | the `verificationId` from above |
+| CNAME | `<subdomain>` | the `defaultHostName` from above (`<APP_NAME>.azurewebsites.net`) |
+
+The TXT record proves you own the domain; the CNAME routes traffic to the app. Wait for DNS to propagate (`dig +short TXT asuid.$HOSTNAME` and `dig +short CNAME $HOSTNAME` should return the values above), then:
+
+```bash
+# 2. Bind the custom domain to the app
+az webapp config hostname add \
+  --webapp-name $APP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --hostname $HOSTNAME
+
+# 3. Issue the free managed certificate (can take a few minutes)
+az webapp config ssl create \
+  --hostname $HOSTNAME \
+  --name $APP_NAME \
+  --resource-group $RESOURCE_GROUP
+# Poll until it's ready:
+az webapp config ssl show -g $RESOURCE_GROUP --certificate-name $HOSTNAME
+
+# 4. Bind the certificate (grab the thumbprint from step 3's output)
+az webapp config ssl bind \
+  --certificate-thumbprint <THUMBPRINT> \
+  --ssl-type SNI \
+  --name $APP_NAME \
+  --resource-group $RESOURCE_GROUP
+
+# 5. Force HTTPS (redirect any plain-HTTP requests)
+az webapp update --name $APP_NAME --resource-group $RESOURCE_GROUP --https-only true
+```
+
+Note: right after binding, you may briefly get Azure's default wildcard certificate instead of yours on some requests — this is normal edge-fleet propagation lag and typically resolves within a few minutes. The managed certificate auto-renews before its ~6-month expiry as long as the CNAME and TXT records stay in place; no action needed.
+
+If you specifically want a certificate issued by Let's Encrypt itself rather than Azure's managed certificate, you'd instead run `certbot` with a DNS-01 challenge against your provider, convert the resulting `fullchain.pem`/`privkey.pem` to a `.pfx` (`openssl pkcs12 -export ...`), and upload it with `az webapp config ssl upload` — but you'd then own renewing and re-uploading it every ~90 days, since App Service won't do that for a manually-uploaded certificate.
 
 ## Cost estimate
 
