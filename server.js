@@ -10,6 +10,7 @@ const { ensureTableExists } = require('./src/storage');
 const authRoutes = require('./src/routes/auth');
 const taskRoutes = require('./src/routes/tasks');
 const dashboardRoutes = require('./src/routes/dashboard');
+const labelRoutes = require('./src/routes/labels');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -39,6 +40,7 @@ app.use('/api', authRoutes);
 // Everything else under /api requires an authenticated session.
 app.use('/api/tasks', requireAuth, taskRoutes);
 app.use('/api/dashboard', requireAuth, dashboardRoutes);
+app.use('/api/labels', requireAuth, labelRoutes);
 
 // Protect the app pages themselves; redirect to the login page if not signed in.
 app.get(['/', '/index.html'], requireAuthPage, (req, res) => {

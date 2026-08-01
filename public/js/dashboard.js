@@ -45,4 +45,8 @@ async function loadDashboard() {
 }
 
 document.getElementById('range-select').addEventListener('change', loadDashboard);
-loadDashboard();
+
+(async function init() {
+  await rolloverAllCategories();
+  await loadDashboard();
+})();

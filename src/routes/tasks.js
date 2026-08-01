@@ -22,7 +22,7 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { date, title, time } = req.body || {};
+    const { date, title, time, labelId } = req.body || {};
     const category = CATEGORIES.includes(req.body?.category) ? req.body.category : 'personal';
     if (!date || !DATE_RE.test(date)) {
       return res.status(400).json({ error: 'A valid date (YYYY-MM-DD) is required' });
@@ -33,8 +33,22 @@ router.post('/', async (req, res, next) => {
     if (time && !TIME_RE.test(time)) {
       return res.status(400).json({ error: 'Time must be in HH:MM format' });
     }
-    const task = await storage.createTask(date, { title: title.trim(), time, category });
+    const task = await storage.createTask(date, { title: title.trim(), time, category, labelId });
     res.status(201).json(task);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/rollover', async (req, res, next) => {
+  try {
+    const { today } = req.body || {};
+    const category = CATEGORIES.includes(req.body?.category) ? req.body.category : 'personal';
+    if (!today || !DATE_RE.test(today)) {
+      return res.status(400).json({ error: 'A valid today (YYYY-MM-DD) is required' });
+    }
+    const movedCount = await storage.rolloverIncompleteTasks(category, today);
+    res.json({ movedCount });
   } catch (err) {
     next(err);
   }
@@ -43,12 +57,12 @@ router.post('/', async (req, res, next) => {
 router.patch('/:date/:id', async (req, res, next) => {
   try {
     const { date, id } = req.params;
-    const { title, time, completed } = req.body || {};
+    const { title, time, completed, labelId } = req.body || {};
     if (!DATE_RE.test(date)) return res.status(400).json({ error: 'Invalid date' });
     if (time && !TIME_RE.test(time)) {
       return res.status(400).json({ error: 'Time must be in HH:MM format' });
     }
-    const task = await storage.updateTask(date, id, { title, time, completed });
+    const task = await storage.updateTask(date, id, { title, time, completed, labelId });
     res.json(task);
   } catch (err) {
     next(err);

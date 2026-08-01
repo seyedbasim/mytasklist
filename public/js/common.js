@@ -56,3 +56,29 @@ async function apiFetch(url, options = {}) {
   }
   return res;
 }
+
+function formatLocalDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function todayStr() {
+  return formatLocalDate(new Date());
+}
+
+async function triggerRollover(category) {
+  try {
+    await apiFetch('/api/tasks/rollover', {
+      method: 'POST',
+      body: JSON.stringify({ category, today: todayStr() }),
+    });
+  } catch (err) {
+    // Non-fatal — it'll simply retry the next time the app loads.
+  }
+}
+
+async function rolloverAllCategories() {
+  await Promise.all([triggerRollover('personal'), triggerRollover('work')]);
+}

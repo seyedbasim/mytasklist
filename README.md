@@ -4,6 +4,9 @@ A simple, spreadsheet-style daily task list web app with a progress dashboard, b
 
 - **Excel-like task grid** — one row per task, a checkbox to mark it done, inline-editable time and title cells.
 - **Tasks are organized per day** — pick a date, add tasks for that day. A time is optional; tasks without one just don't show a time.
+- **Incomplete tasks roll over automatically** — anything left unchecked past its day moves forward to today the next time the app is opened, and keeps moving forward until it's completed. There's no scheduled job for this (which would need extra Azure resources); it runs lazily whenever the app loads.
+- **Personal / Work toggle** — a separate task list, dashboard, and set of labels for each category; the toggle persists across page loads.
+- **Colored labels** — define named, colored labels per category and filter the task grid by label.
 - **Dashboard** — completion rate, tasks completed vs. created, a current streak counter, and a bar chart of daily completion % over the last 7/14/30/90 days.
 - **Password-protected** — single shared password, session-cookie based, since the app is reachable on a public URL.
 - **Cheap to run** — Node.js + Express serving a static frontend (no build step, no separate hosting), with data stored in Azure Table Storage, which for personal-scale usage costs a few cents a month.
@@ -36,15 +39,16 @@ Azure App Service (Linux, Node.js)
   Express server
     - serves the static frontend from /public
     - session-cookie auth (single shared password)
-    - REST API: /api/tasks, /api/dashboard
+    - REST API: /api/tasks, /api/dashboard, /api/labels
       │
       ▼
-Azure Storage Account → Table Storage ("Tasks" table)
+Azure Storage Account → Table Storage ("Tasks" and "Labels" tables)
 ```
 
 - **Backend**: Node.js + Express. No React/build step — the frontend is plain HTML/CSS/JS served directly from `/public`, which keeps the app small and avoids needing a build pipeline in the deployment.
 - **Data store**: [Azure Table Storage](https://learn.microsoft.com/azure/storage/tables/table-storage-overview) — a NoSQL key-value store that's part of a regular Storage Account. It's the cheapest persistent data option on Azure (fractions of a cent per month at this scale), fully managed, and requires no server/database to patch or size.
-  - `PartitionKey` = the task's date (`YYYY-MM-DD`), `RowKey` = a unique task ID. This lets the app fetch "all tasks for a day" or "all tasks in a date range" (for the dashboard) as a single efficient query.
+  - **Tasks table**: `PartitionKey` = the task's date (`YYYY-MM-DD`), `RowKey` = a unique task ID, with `category` (`personal`/`work`) and `labelId` as properties. This lets the app fetch "all tasks for a day" or "all tasks in a date range" (for the dashboard) as a single efficient query, filtered by category.
+  - **Labels table**: `PartitionKey` = category (`personal`/`work`), `RowKey` = a unique label ID, with `name` and `color` (hex) as properties — keeping personal and work labels completely separate.
 - **Auth**: one shared password (set via an environment variable), checked against a login form, backed by a signed session cookie (`express-session`). Login attempts are rate-limited.
 
 ## Project structure
@@ -107,6 +111,7 @@ Azurite emulates Azure Table Storage locally, so nothing is created in your real
 | `SESSION_SECRET` | Secret used to sign session cookies — generate with `openssl rand -hex 32` | random hex string |
 | `AZURE_STORAGE_CONNECTION_STRING` | Connection string for your Storage Account. Use `UseDevelopmentStorage=true` for local Azurite | see [Deploying to Azure](#deploying-to-azure) |
 | `AZURE_TABLE_NAME` | Name of the table used to store tasks (auto-created on startup) | `Tasks` |
+| `AZURE_LABELS_TABLE_NAME` | Name of the table used to store label definitions (auto-created on startup) | `Labels` |
 
 In Azure, set these under **App Service → Configuration → Application settings** rather than committing a `.env` file.
 
