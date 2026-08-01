@@ -11,6 +11,7 @@ const authRoutes = require('./src/routes/auth');
 const taskRoutes = require('./src/routes/tasks');
 const dashboardRoutes = require('./src/routes/dashboard');
 const labelRoutes = require('./src/routes/labels');
+const webauthnRoutes = require('./src/routes/webauthn');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -18,7 +19,22 @@ const PORT = process.env.PORT || 8080;
 // Azure App Service sits behind a reverse proxy; needed for secure cookies to work.
 app.set('trust proxy', 1);
 
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", 'https://cdn.jsdelivr.net'],
+        styleSrc: ["'self'"],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+  })
+);
 app.use(express.json());
 app.use(
   session({
@@ -27,7 +43,7 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: 'strict',
       secure: process.env.NODE_ENV === 'production',
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     },
@@ -42,12 +58,19 @@ app.use('/api/tasks', requireAuth, taskRoutes);
 app.use('/api/dashboard', requireAuth, dashboardRoutes);
 app.use('/api/labels', requireAuth, labelRoutes);
 
+// WebAuthn has a mix of public routes (status, login) and protected ones (registering new
+// passkeys, listing/deleting them) — each route inside applies requireAuth as needed.
+app.use('/api/webauthn', webauthnRoutes);
+
 // Protect the app pages themselves; redirect to the login page if not signed in.
 app.get(['/', '/index.html'], requireAuthPage, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 app.get('/dashboard.html', requireAuthPage, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+app.get('/passkeys.html', requireAuthPage, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'passkeys.html'));
 });
 
 // Static assets (including the public login page) are served last.

@@ -1,6 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
+const storage = require('../storage');
 
 const router = express.Router();
 
@@ -19,17 +20,28 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-router.post('/login', loginLimiter, (req, res) => {
-  const { password } = req.body || {};
-  const expected = process.env.APP_PASSWORD;
-  if (!expected) {
-    return res.status(500).json({ error: 'Server is missing APP_PASSWORD configuration' });
+router.post('/login', loginLimiter, async (req, res, next) => {
+  try {
+    // Once a passkey is registered, password login is disabled entirely — there's no
+    // brute-forceable credential left to guard, regardless of what's passed here.
+    const credentials = await storage.getCredentials();
+    if (credentials.length > 0) {
+      return res.status(403).json({ error: 'Password login is disabled. Sign in with your passkey.' });
+    }
+
+    const { password } = req.body || {};
+    const expected = process.env.APP_PASSWORD;
+    if (!expected) {
+      return res.status(500).json({ error: 'Server is missing APP_PASSWORD configuration' });
+    }
+    if (typeof password === 'string' && safeEqual(password, expected)) {
+      req.session.authenticated = true;
+      return res.json({ ok: true });
+    }
+    return res.status(401).json({ error: 'Incorrect password' });
+  } catch (err) {
+    next(err);
   }
-  if (typeof password === 'string' && safeEqual(password, expected)) {
-    req.session.authenticated = true;
-    return res.json({ ok: true });
-  }
-  return res.status(401).json({ error: 'Incorrect password' });
 });
 
 router.post('/logout', (req, res) => {

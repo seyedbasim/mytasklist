@@ -376,6 +376,20 @@ tfoot.add-row,
   margin-top: 12px;
 }
 
+.success-text {
+  color: var(--accent);
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.passkey-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
 /* Dashboard */
 .dashboard-header {
   display: flex;
@@ -562,4 +576,43 @@ tfoot.add-row,
 
 .color-swatch.selected {
   border-color: var(--text);
+}
+
+/* Passkeys */
+.warning-banner {
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  color: #8a6d00;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.passkey-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.passkey-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.passkey-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.passkey-meta {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
 }

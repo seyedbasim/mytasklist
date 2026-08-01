@@ -8,7 +8,7 @@ A simple, spreadsheet-style daily task list web app with a progress dashboard, b
 - **Personal / Work toggle** — a separate task list, dashboard, and set of labels for each category; the toggle persists across page loads.
 - **Colored labels** — define named, colored labels per category and filter the task grid by label.
 - **Dashboard** — completion rate, tasks completed vs. created, a current streak counter, and a bar chart of daily completion % over the last 7/14/30/90 days.
-- **Password-protected** — single shared password, session-cookie based, since the app is reachable on a public URL.
+- **Passkey sign-in** — Face ID / Touch ID via WebAuthn instead of a password. Register once and it syncs to your other Apple devices automatically through iCloud Keychain. Once a passkey exists, password sign-in disables itself — there's no brute-forceable credential left at all.
 - **Cheap to run** — Node.js + Express serving a static frontend (no build step, no separate hosting), with data stored in Azure Table Storage, which for personal-scale usage costs a few cents a month.
 
 ---
@@ -22,10 +22,11 @@ A simple, spreadsheet-style daily task list web app with a progress dashboard, b
 5. [Environment variables](#environment-variables)
 6. [Deploying to Azure](#deploying-to-azure)
 7. [Custom domain & HTTPS](#custom-domain--https)
-8. [Cost estimate](#cost-estimate)
-9. [Security notes](#security-notes)
-10. [Troubleshooting](#troubleshooting)
-11. [Possible future improvements](#possible-future-improvements)
+8. [Setting up passkey sign-in](#setting-up-passkey-sign-in)
+9. [Cost estimate](#cost-estimate)
+10. [Security notes](#security-notes)
+11. [Troubleshooting](#troubleshooting)
+12. [Possible future improvements](#possible-future-improvements)
 
 ---
 
@@ -39,17 +40,18 @@ Azure App Service (Linux, Node.js)
   Express server
     - serves the static frontend from /public
     - session-cookie auth (single shared password)
-    - REST API: /api/tasks, /api/dashboard, /api/labels
+    - REST API: /api/tasks, /api/dashboard, /api/labels, /api/webauthn
       │
       ▼
-Azure Storage Account → Table Storage ("Tasks" and "Labels" tables)
+Azure Storage Account → Table Storage ("Tasks", "Labels", "Credentials" tables)
 ```
 
 - **Backend**: Node.js + Express. No React/build step — the frontend is plain HTML/CSS/JS served directly from `/public`, which keeps the app small and avoids needing a build pipeline in the deployment.
 - **Data store**: [Azure Table Storage](https://learn.microsoft.com/azure/storage/tables/table-storage-overview) — a NoSQL key-value store that's part of a regular Storage Account. It's the cheapest persistent data option on Azure (fractions of a cent per month at this scale), fully managed, and requires no server/database to patch or size.
   - **Tasks table**: `PartitionKey` = the task's date (`YYYY-MM-DD`), `RowKey` = a unique task ID, with `category` (`personal`/`work`) and `labelId` as properties. This lets the app fetch "all tasks for a day" or "all tasks in a date range" (for the dashboard) as a single efficient query, filtered by category.
   - **Labels table**: `PartitionKey` = category (`personal`/`work`), `RowKey` = a unique label ID, with `name` and `color` (hex) as properties — keeping personal and work labels completely separate.
-- **Auth**: one shared password (set via an environment variable), checked against a login form, backed by a signed session cookie (`express-session`). Login attempts are rate-limited.
+  - **Credentials table**: one row per registered passkey — the WebAuthn credential ID, public key, signature counter, and a friendly label. Never contains a private key; that stays on your device's secure enclave.
+- **Auth**: passkey (WebAuthn) sign-in via [`@simplewebauthn`](https://simplewebauthn.dev/) — free, open-source, no third-party identity service. A shared password exists only for the initial bootstrap (registering your first passkey) and disables itself automatically the moment a passkey is registered. See [Setting up passkey sign-in](#setting-up-passkey-sign-in).
 
 ## Project structure
 
@@ -107,11 +109,15 @@ Azurite emulates Azure Table Storage locally, so nothing is created in your real
 |---|---|---|
 | `PORT` | Port the server listens on (App Service sets this automatically in production) | `8080` |
 | `NODE_ENV` | `production` enables secure (HTTPS-only) session cookies | `production` |
-| `APP_PASSWORD` | The shared password used to sign in | a long random string |
+| `APP_PASSWORD` | The shared password used to sign in before a passkey is registered | a long random string |
 | `SESSION_SECRET` | Secret used to sign session cookies — generate with `openssl rand -hex 32` | random hex string |
 | `AZURE_STORAGE_CONNECTION_STRING` | Connection string for your Storage Account. Use `UseDevelopmentStorage=true` for local Azurite | see [Deploying to Azure](#deploying-to-azure) |
 | `AZURE_TABLE_NAME` | Name of the table used to store tasks (auto-created on startup) | `Tasks` |
 | `AZURE_LABELS_TABLE_NAME` | Name of the table used to store label definitions (auto-created on startup) | `Labels` |
+| `AZURE_CREDENTIALS_TABLE_NAME` | Name of the table used to store passkey credentials (auto-created on startup) | `Credentials` |
+| `WEBAUTHN_RP_NAME` | Friendly name shown in the OS passkey picker | `Basim's Tasks` |
+| `WEBAUTHN_RP_ID` | **Must exactly match the domain serving the app** (no `https://`, no path) | `tasks.seyedbasim.net` |
+| `WEBAUTHN_ORIGIN` | **Must exactly match the full origin** the app is served from | `https://tasks.seyedbasim.net` |
 
 In Azure, set these under **App Service → Configuration → Application settings** rather than committing a `.env` file.
 
@@ -256,6 +262,36 @@ Note: right after binding, you may briefly get Azure's default wildcard certific
 
 If you specifically want a certificate issued by Let's Encrypt itself rather than Azure's managed certificate, you'd instead run `certbot` with a DNS-01 challenge against your provider, convert the resulting `fullchain.pem`/`privkey.pem` to a `.pfx` (`openssl pkcs12 -export ...`), and upload it with `az webapp config ssl upload` — but you'd then own renewing and re-uploading it every ~90 days, since App Service won't do that for a manually-uploaded certificate.
 
+## Setting up passkey sign-in
+
+The app ships with password auth so it's reachable on first deploy, then upgrades itself to passkey-only once you register one. **The passkey must be registered against the real domain it'll be used on** — WebAuthn cryptographically binds a passkey to the exact `WEBAUTHN_RP_ID`/`WEBAUTHN_ORIGIN` it was created with, so these must be set to your real domain *before* you register, not left on the `localhost` defaults.
+
+```bash
+# 1. Point WebAuthn at your real domain (must match exactly, including https://)
+az webapp config appsettings set \
+  --name $APP_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --settings \
+    WEBAUTHN_RP_ID="tasks.example.com" \
+    WEBAUTHN_ORIGIN="https://tasks.example.com"
+```
+
+Then, in a browser on your Mac, iPad, or iPhone (Safari, or any browser with platform passkey support):
+
+1. Sign in with the password.
+2. Go to **Passkeys** in the nav bar.
+3. Click **Add a passkey**, name it (e.g. "MacBook Pro"), and complete the Face ID/Touch ID prompt.
+
+That's it — password sign-in disables itself automatically the moment that passkey is registered. If all your devices share the same iCloud account with iCloud Keychain sync turned on, this single passkey is usable from your Mac, iPad, and iPhone without registering again on each one.
+
+**Recovery if you ever lose access to every device with the passkey**: there's no password fallback once a passkey exists, by design. To reset, delete the `Credentials` table from the Storage Account — the app recreates it empty on the next request, and password sign-in resumes automatically:
+
+```bash
+az storage table delete --name Credentials --account-name $STORAGE_ACCOUNT --account-key "$(az storage account keys list --account-name $STORAGE_ACCOUNT --resource-group $RESOURCE_GROUP --query '[0].value' -o tsv)"
+```
+
+Then sign in with `APP_PASSWORD` and register a new passkey as above.
+
 ## Cost estimate
 
 | Resource | Tier | Approx. cost |
@@ -268,11 +304,14 @@ So a realistic total is **~$13/month** on B1 (mainly the compute), or **effectiv
 
 ## Security notes
 
-- The app is protected by a single shared password (`APP_PASSWORD`) and a signed, `httpOnly`, `secure` (in production) session cookie. There's no per-user account system — treat it as a personal tool, not a multi-tenant app.
-- Login attempts are rate-limited (10 per 15 minutes per IP) to slow down brute-forcing.
-- `SESSION_SECRET` and `APP_PASSWORD` should be long, random values in production — never reuse the placeholder values from `.env.example`.
-- Sessions are kept in memory in the Node process. This is fine as long as the App Service plan runs a single instance (true by default on B1/F1). If you ever scale out to multiple instances, sessions won't be shared across them and you'd need a shared session store (e.g. Redis) — not needed at this app's scale.
-- All traffic to `*.azurewebsites.net` is HTTPS by default.
+- **Auth model**: passkey (WebAuthn) sign-in is the intended long-term state. `APP_PASSWORD` only matters before a passkey is registered — see [Setting up passkey sign-in](#setting-up-passkey-sign-in). Once a passkey exists, `POST /api/login` rejects every request regardless of password, closing off the brute-force surface entirely rather than just rate-limiting it.
+- Login attempts (both password and passkey) are rate-limited (10 per 15 minutes per IP).
+- Sessions are `httpOnly`, `secure` in production, and `SameSite=Strict` — a signed cookie via `express-session`, kept in memory in the Node process. This is fine as long as the App Service plan runs a single instance (true by default on B1/F1); scaling out to multiple instances would need a shared session store (e.g. Redis), not needed at this app's scale.
+- A [Content-Security-Policy](https://developer.mozilla.org/docs/Web/HTTP/CSP) is enforced (`script-src 'self' https://cdn.jsdelivr.net`, no `unsafe-inline` anywhere) — the only external script sources are the Chart.js and SimpleWebAuthn CDN bundles.
+- `SESSION_SECRET` and `APP_PASSWORD` should be long, random values — never reuse the placeholder values from `.env.example`.
+- All traffic to `*.azurewebsites.net` and your custom domain is HTTPS by default (`httpsOnly` is enabled on the App Service).
+- **If you ever paste secrets into a chat/terminal session that gets logged somewhere** (as happened a few times while building this), treat them as burned: rotate the Storage Account key (Portal → Storage Account → Access keys → Regenerate, then update `AZURE_STORAGE_CONNECTION_STRING`) and `SESSION_SECRET`.
+- Run `npm audit` periodically and update dependencies — none of the flagged issues at time of writing were in a production code path, but it's worth checking after any `npm install`.
 
 ## Troubleshooting
 
@@ -283,6 +322,8 @@ So a realistic total is **~$13/month** on B1 (mainly the compute), or **effectiv
 - **Downloading the publish profile fails with a Basic Authentication error** — newer App Services disable SCM/FTP Basic Auth by default. Re-enable it under App Service → Configuration → General settings → "SCM Basic Auth Publishing Credentials" (and FTP if needed), or switch the GitHub Actions workflow to OIDC/federated credentials instead.
 - **Changed an app setting (e.g. `APP_PASSWORD`) but the old value still seems active** — propagation to the running process can lag behind the `az webapp config appsettings set` call by anywhere from a few seconds to about a minute. Run `az webapp restart` and wait for `/api/session` to respond before retrying.
 - **Cold starts on the Free (F1) tier** — expected; upgrade to B1 and enable Always On if this is a problem.
+- **Passkey registration fails with a security/origin error** — `WEBAUTHN_RP_ID`/`WEBAUTHN_ORIGIN` don't match the domain you're actually on. They must be exact: `WEBAUTHN_RP_ID` is just the hostname (`tasks.example.com`), `WEBAUTHN_ORIGIN` is the full origin including scheme (`https://tasks.example.com`). See [Setting up passkey sign-in](#setting-up-passkey-sign-in).
+- **Locked out because every device with the passkey is gone** — see the recovery command in [Setting up passkey sign-in](#setting-up-passkey-sign-in); it clears stored passkeys and re-enables `APP_PASSWORD` sign-in.
 
 ## Possible future improvements
 

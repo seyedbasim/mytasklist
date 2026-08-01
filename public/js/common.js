@@ -34,10 +34,11 @@ function renderNav(active) {
     <div class="nav-links">
       <a href="/" class="${active === 'tasks' ? 'active' : ''}">Tasks</a>
       <a href="/dashboard.html" class="${active === 'dashboard' ? 'active' : ''}">Dashboard</a>
+      <a href="/passkeys.html" class="${active === 'passkeys' ? 'active' : ''}">Passkeys</a>
       <button id="logout-btn" class="link-btn">Logout</button>
     </div>
   `;
-  renderCategoryToggle();
+  if (active === 'tasks' || active === 'dashboard') renderCategoryToggle();
   document.body.prepend(nav);
   document.getElementById('logout-btn').addEventListener('click', async () => {
     await fetch('/api/logout', { method: 'POST' });

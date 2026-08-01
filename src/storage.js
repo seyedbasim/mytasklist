@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const TABLE_NAME = process.env.AZURE_TABLE_NAME || 'Tasks';
 const LABELS_TABLE_NAME = process.env.AZURE_LABELS_TABLE_NAME || 'Labels';
+const CREDENTIALS_TABLE_NAME = process.env.AZURE_CREDENTIALS_TABLE_NAME || 'Credentials';
 const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING || 'UseDevelopmentStorage=true';
 
 if (!process.env.AZURE_STORAGE_CONNECTION_STRING) {
@@ -19,16 +20,17 @@ const labelsTableClient = TableClient.fromConnectionString(connectionString, LAB
   allowInsecureConnection: true,
 });
 
+const credentialsTableClient = TableClient.fromConnectionString(connectionString, CREDENTIALS_TABLE_NAME, {
+  allowInsecureConnection: true,
+});
+
 async function ensureTableExists() {
-  try {
-    await tableClient.createTable();
-  } catch (err) {
-    if (err.statusCode !== 409) throw err;
-  }
-  try {
-    await labelsTableClient.createTable();
-  } catch (err) {
-    if (err.statusCode !== 409) throw err;
+  for (const client of [tableClient, labelsTableClient, credentialsTableClient]) {
+    try {
+      await client.createTable();
+    } catch (err) {
+      if (err.statusCode !== 409) throw err;
+    }
   }
 }
 
@@ -179,6 +181,68 @@ async function deleteLabel(category, id) {
   }
 }
 
+const CREDENTIAL_PARTITION = 'default';
+
+function toCredential(entity) {
+  return {
+    id: entity.rowKey,
+    publicKey: Buffer.from(entity.publicKey, 'base64'),
+    counter: entity.counter,
+    transports: entity.transports ? JSON.parse(entity.transports) : [],
+    deviceType: entity.deviceType || '',
+    backedUp: !!entity.backedUp,
+    label: entity.label || '',
+    createdAt: entity.createdAt,
+  };
+}
+
+async function getCredentials() {
+  const credentials = [];
+  const entities = credentialsTableClient.listEntities({
+    queryOptions: { filter: `PartitionKey eq '${CREDENTIAL_PARTITION}'` },
+  });
+  for await (const entity of entities) credentials.push(toCredential(entity));
+  return credentials;
+}
+
+async function getCredentialById(id) {
+  try {
+    const entity = await credentialsTableClient.getEntity(CREDENTIAL_PARTITION, id);
+    return toCredential(entity);
+  } catch (err) {
+    if (err.statusCode === 404) return null;
+    throw err;
+  }
+}
+
+async function createCredential({ id, publicKey, counter, transports, deviceType, backedUp, label }) {
+  const entity = {
+    partitionKey: CREDENTIAL_PARTITION,
+    rowKey: id,
+    publicKey: Buffer.from(publicKey).toString('base64'),
+    counter,
+    transports: JSON.stringify(transports || []),
+    deviceType: deviceType || '',
+    backedUp: !!backedUp,
+    label: label || '',
+    createdAt: new Date().toISOString(),
+  };
+  await credentialsTableClient.createEntity(entity);
+  return toCredential(entity);
+}
+
+async function updateCredentialCounter(id, counter) {
+  await credentialsTableClient.updateEntity({ partitionKey: CREDENTIAL_PARTITION, rowKey: id, counter }, 'Merge');
+}
+
+async function deleteCredential(id) {
+  try {
+    await credentialsTableClient.deleteEntity(CREDENTIAL_PARTITION, id);
+  } catch (err) {
+    if (err.statusCode !== 404) throw err;
+  }
+}
+
 module.exports = {
   ensureTableExists,
   getTasksByDate,
@@ -190,4 +254,9 @@ module.exports = {
   getLabels,
   createLabel,
   deleteLabel,
+  getCredentials,
+  getCredentialById,
+  createCredential,
+  updateCredentialCounter,
+  deleteCredential,
 };

@@ -43,6 +43,13 @@ function labelById(id) {
   return labels.find((l) => l.id === id) || null;
 }
 
+function createLabelDot(color) {
+  const dot = document.createElement('span');
+  dot.className = 'label-dot';
+  dot.style.background = color;
+  return dot;
+}
+
 async function loadLabels() {
   const res = await apiFetch(`/api/labels?category=${currentCategory}`);
   labels = await res.json();
@@ -66,7 +73,8 @@ function renderLabelFilters() {
   for (const label of labels) {
     const btn = document.createElement('button');
     btn.className = `label-pill ${activeLabelFilter === label.id ? 'active' : ''}`;
-    btn.innerHTML = `<span class="label-dot" style="background:${label.color}"></span>${label.name}`;
+    btn.appendChild(createLabelDot(label.color));
+    btn.appendChild(document.createTextNode(label.name));
     btn.addEventListener('click', () => {
       activeLabelFilter = label.id;
       renderLabelFilters();
@@ -87,7 +95,8 @@ function renderLabelManager() {
   for (const label of labels) {
     const chip = document.createElement('span');
     chip.className = 'label-chip';
-    chip.innerHTML = `<span class="label-dot" style="background:${label.color}"></span>${label.name}`;
+    chip.appendChild(createLabelDot(label.color));
+    chip.appendChild(document.createTextNode(label.name));
     const del = document.createElement('button');
     del.className = 'label-chip-remove';
     del.textContent = '×';

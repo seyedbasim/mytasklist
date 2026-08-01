@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tasks</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%232e7d32'/%3E%3Cpath d='M6.5 12.5l3.5 3.5 7.5-8' stroke='white' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Passkeys</h1>
+    <p class="subtitle">
+      Passkeys use Face ID / Touch ID instead of a password. Registering once on a device signed
+      into your iCloud account syncs it to your other Apple devices automatically via iCloud
+      Keychain — you usually only need to add one.
+    </p>
+
+    <div id="password-warning" class="warning-banner" hidden>
+      No passkey is registered yet — password sign-in is still active. Register a passkey below to
+      switch to passkey-only sign-in.
+    </div>
+
+    <div id="passkey-list" class="passkey-list"></div>
+
+    <div class="label-form">
+      <input type="text" id="new-passkey-label" placeholder="Name this passkey (e.g. MacBook Pro)" maxlength="60" />
+      <button id="register-btn" class="primary-btn">Add a passkey</button>
+    </div>
+    <p id="error" class="error-text" hidden></p>
+    <p id="success" class="success-text" hidden></p>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@13.3.0/dist/bundle/index.umd.min.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/passkeys.js"></script>
+</body>
+</html>
