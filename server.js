@@ -7,7 +7,6 @@ const session = require('express-session');
 
 const { requireAuth, requireAuthPage } = require('./src/auth');
 const { ensureTableExists } = require('./src/storage');
-const { requireAllowedRegion } = require('./src/geoRestriction');
 const authRoutes = require('./src/routes/auth');
 const taskRoutes = require('./src/routes/tasks');
 const dashboardRoutes = require('./src/routes/dashboard');
@@ -20,14 +19,9 @@ const PORT = process.env.PORT || 8080;
 // Azure App Service sits behind a reverse proxy; needed for secure cookies to work.
 app.set('trust proxy', 1);
 
-// Azure's own internal warm-up/health probe must never go through the region check — its
-// source isn't a real end-user IP, and blocking it makes Azure think the container never
-// becomes ready, which manifested as 70+ second startup stalls and flaky behavior right
-// after every restart. This is registered before requireAllowedRegion for that reason.
+// Lightweight endpoint for Azure's internal health probe, so it doesn't have to go through
+// auth/session overhead just to check the app is up.
 app.get('/healthz', (req, res) => res.status(200).send('ok'));
-
-// Blocks the entire app for requests outside the allowed region, before anything else runs.
-app.use(requireAllowedRegion);
 
 app.use(
   helmet({

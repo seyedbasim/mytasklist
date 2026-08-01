@@ -9,7 +9,6 @@ A simple, spreadsheet-style daily task list web app with a progress dashboard, b
 - **Colored labels** — define named, colored labels per category and filter the task grid by label.
 - **Dashboard** — completion rate, tasks completed vs. created, a current streak counter, and a bar chart of daily completion % over the last 7/14/30/90 days.
 - **Passkey sign-in** — Face ID / Touch ID via WebAuthn instead of a password. Register once and it syncs to your other Apple devices automatically through iCloud Keychain. Once a passkey exists, password sign-in disables itself — there's no brute-forceable credential left at all.
-- **Region-restricted** — the entire app is only reachable from a configured country (Singapore by default); every other request is blocked before it reaches any route.
 - **Cheap to run** — Node.js + Express serving a static frontend (no build step, no separate hosting), with data stored in Azure Table Storage, which for personal-scale usage costs a few cents a month.
 
 ---
@@ -24,11 +23,10 @@ A simple, spreadsheet-style daily task list web app with a progress dashboard, b
 6. [Deploying to Azure](#deploying-to-azure)
 7. [Custom domain & HTTPS](#custom-domain--https)
 8. [Setting up passkey sign-in](#setting-up-passkey-sign-in)
-9. [Region restriction](#region-restriction)
-10. [Cost estimate](#cost-estimate)
-11. [Security notes](#security-notes)
-12. [Troubleshooting](#troubleshooting)
-13. [Possible future improvements](#possible-future-improvements)
+9. [Cost estimate](#cost-estimate)
+10. [Security notes](#security-notes)
+11. [Troubleshooting](#troubleshooting)
+12. [Possible future improvements](#possible-future-improvements)
 
 ---
 
@@ -120,9 +118,6 @@ Azurite emulates Azure Table Storage locally, so nothing is created in your real
 | `WEBAUTHN_RP_NAME` | Friendly name shown in the OS passkey picker | `Basim's Tasks` |
 | `WEBAUTHN_RP_ID` | **Must exactly match the domain serving the app** (no `https://`, no path) | `tasks.seyedbasim.net` |
 | `WEBAUTHN_ORIGIN` | **Must exactly match the full origin** the app is served from | `https://tasks.seyedbasim.net` |
-| `ALLOWED_COUNTRY_CODE` | ISO country code the app is restricted to (whole site, every request) | `SG` |
-| `IPINFO_TOKEN` | Free account token from [ipinfo.io](https://ipinfo.io/signup) used for the region check | see [Region restriction](#region-restriction) |
-| `DISABLE_GEO_RESTRICTION` | Emergency bypass for the region restriction — see [Region restriction](#region-restriction) | `false` |
 
 In Azure, set these under **App Service → Configuration → Application settings** rather than committing a `.env` file.
 
@@ -297,29 +292,6 @@ az storage table delete --name Credentials --account-name $STORAGE_ACCOUNT --acc
 
 Then sign in with `APP_PASSWORD` and register a new passkey as above.
 
-## Region restriction
-
-The entire app — every page and API route, including the login page itself — is blocked for any request whose IP doesn't geolocate to `ALLOWED_COUNTRY_CODE` (Singapore, `SG`, by default). This runs as the very first thing on every request, before auth, before static files, before anything else. It uses [ipinfo.io](https://ipinfo.io/) (free tier, 50k lookups/month, requires a free account token — see `IPINFO_TOKEN` above), with results cached per IP for an hour to keep it fast and light on the quota.
-
-A keyless service ([ip-api.com](https://ip-api.com/)) was tried first, since it needs no signup at all. It worked in initial testing but started failing consistently within hours of going live in production — Azure App Service on a Basic plan shares its outbound IP with many other customers, and that free service rate-limits *per source IP*, so other tenants' traffic on the same shared IP exhausted the quota for everyone using it, including us. A token-based service avoids this because the quota is tied to the account, not the calling IP.
-
-**`/healthz` is deliberately exempt from the region check** (and from auth). Azure App Service pings a health-check path internally to decide when a container is ready to receive traffic; that probe comes from an internal Azure address, not a real end-user IP. Before this exemption existed, Azure's own probe was getting blocked by this middleware, which made Azure think the container never finished starting — container warm-up stretched to 70+ seconds and behavior right after every restart was unpredictable. `az webapp config set --generic-configurations '{"healthCheckPath": "/healthz"}'` tells Azure to use it.
-
-**This fails closed**: if the lookup service is unreachable, times out, or errors for any reason (including a missing/invalid `IPINFO_TOKEN`), the request is blocked, not allowed through, after one retry. That's a deliberate choice for stronger security, but it means an outage of a third-party service — something outside your control — could lock you out of your own app. This already happened once during development (see above); if you'd rather trade some strictness for guaranteed availability, the fail-open behavior in `src/geoRestriction.js`'s catch block is a one-line change (`next()` instead of blocking).
-
-**Emergency bypass**: if you're ever blocked when you shouldn't be (travelling, a VPN, the lookup service having issues, or your IP being geolocated incorrectly), you can always still reach the [Azure Portal](https://portal.azure.com) from anywhere in the world — the region restriction only applies to *this app*, never to Azure's own management surface. From there:
-
-```bash
-az webapp config appsettings set \
-  --name $APP_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --settings DISABLE_GEO_RESTRICTION=true
-```
-
-This takes effect within moments, no redeploy needed. Set it back to `false` once you're able to access the app normally again. You can run this same command from Azure Cloud Shell (portal.azure.com, top-right icon) on any device with a browser, from anywhere — it doesn't require the Azure CLI to be installed locally.
-
-**Local development** is unaffected: requests from private/loopback IPs (i.e. `localhost`) always bypass this check, so `npm run dev` works normally regardless of where you are.
-
 ## Cost estimate
 
 | Resource | Tier | Approx. cost |
@@ -333,7 +305,6 @@ So a realistic total is **~$13/month** on B1 (mainly the compute), or **effectiv
 ## Security notes
 
 - **Auth model**: passkey (WebAuthn) sign-in is the intended long-term state. `APP_PASSWORD` only matters before a passkey is registered — see [Setting up passkey sign-in](#setting-up-passkey-sign-in). Once a passkey exists, `POST /api/login` rejects every request regardless of password, closing off the brute-force surface entirely rather than just rate-limiting it.
-- **Region restriction**: the whole app is blocked outside `ALLOWED_COUNTRY_CODE`, fails closed on lookup failure, with an app-setting-based emergency bypass — see [Region restriction](#region-restriction) for the full picture and the bypass command.
 - Login attempts (both password and passkey) are rate-limited (10 per 15 minutes per IP).
 - Sessions are `httpOnly`, `secure` in production, and `SameSite=Strict` — a signed cookie via `express-session`, kept in memory in the Node process. This is fine as long as the App Service plan runs a single instance (true by default on B1/F1); scaling out to multiple instances would need a shared session store (e.g. Redis), not needed at this app's scale.
 - A [Content-Security-Policy](https://developer.mozilla.org/docs/Web/HTTP/CSP) is enforced (`script-src 'self' https://cdn.jsdelivr.net`, no `unsafe-inline` anywhere) — the only external script sources are the Chart.js and SimpleWebAuthn CDN bundles.
@@ -353,7 +324,6 @@ So a realistic total is **~$13/month** on B1 (mainly the compute), or **effectiv
 - **Cold starts on the Free (F1) tier** — expected; upgrade to B1 and enable Always On if this is a problem.
 - **Passkey registration fails with a security/origin error** — `WEBAUTHN_RP_ID`/`WEBAUTHN_ORIGIN` don't match the domain you're actually on. They must be exact: `WEBAUTHN_RP_ID` is just the hostname (`tasks.example.com`), `WEBAUTHN_ORIGIN` is the full origin including scheme (`https://tasks.example.com`). See [Setting up passkey sign-in](#setting-up-passkey-sign-in).
 - **Locked out because every device with the passkey is gone** — see the recovery command in [Setting up passkey sign-in](#setting-up-passkey-sign-in); it clears stored passkeys and re-enables `APP_PASSWORD` sign-in.
-- **"Access to this application is restricted by region" / "...temporarily unavailable"** — you're being blocked by the [region restriction](#region-restriction), either because your IP genuinely geolocates outside `ALLOWED_COUNTRY_CODE`, or the free lookup service failed (fails closed). Use the `DISABLE_GEO_RESTRICTION=true` app setting from the Azure Portal (reachable from anywhere) to get back in.
 
 ## Possible future improvements
 
@@ -361,3 +331,4 @@ So a realistic total is **~$13/month** on B1 (mainly the compute), or **effectiv
 - Multiple named lists or categories/tags per task
 - Export to CSV/Excel
 - Per-user accounts instead of a single shared password
+- Region-restricting sign-in to a specific country was tried and reverted — two different outbound geo-IP lookup services (ip-api.com, then ipinfo.io) both failed unreliably when called from this app's own Azure runtime, for reasons that resisted full diagnosis (one was shared-IP quota exhaustion; the other's cause was never fully confirmed, but was reproducible: worked for ~60s after each restart, then failed consistently). If revisited, the better approach is likely reading the `CF-IPCountry` header from a free Cloudflare proxy in front of the domain — no outbound call from the app at all, sidestepping whatever was wrong with outbound HTTPS from this specific environment.
