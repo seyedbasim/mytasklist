@@ -2,6 +2,7 @@ const express = require('express');
 const storage = require('../storage');
 
 const router = express.Router();
+const CATEGORIES = ['personal', 'work'];
 
 function fmt(d) {
   return d.toISOString().slice(0, 10);
@@ -16,9 +17,10 @@ function addDays(d, n) {
 router.get('/', async (req, res, next) => {
   try {
     const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 1), 365);
+    const category = CATEGORIES.includes(req.query.category) ? req.query.category : 'personal';
     const today = new Date();
     const start = addDays(today, -(days - 1));
-    const tasks = await storage.getTasksInRange(fmt(start), fmt(today));
+    const tasks = await storage.getTasksInRange(fmt(start), fmt(today), category);
 
     const byDate = new Map();
     for (let i = 0; i < days; i++) {

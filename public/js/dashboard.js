@@ -1,10 +1,16 @@
 renderNav('dashboard');
 
 let chart;
+let currentCategory = getCategory();
+
+document.addEventListener('categorychange', (e) => {
+  currentCategory = e.detail.category;
+  loadDashboard();
+});
 
 async function loadDashboard() {
   const days = document.getElementById('range-select').value;
-  const res = await apiFetch(`/api/dashboard?days=${days}`);
+  const res = await apiFetch(`/api/dashboard?days=${days}&category=${currentCategory}`);
   const data = await res.json();
 
   document.getElementById('stat-rate').textContent = `${data.completionRate}%`;

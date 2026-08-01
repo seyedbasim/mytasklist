@@ -28,16 +28,17 @@ function toTask(entity) {
     id: entity.rowKey,
     title: entity.title,
     time: entity.time || '',
+    category: entity.category || 'personal',
     completed: !!entity.completed,
     createdAt: entity.createdAt,
     completedAt: entity.completedAt || null,
   };
 }
 
-async function getTasksByDate(date) {
+async function getTasksByDate(date, category) {
   const tasks = [];
   const entities = tableClient.listEntities({
-    queryOptions: { filter: `PartitionKey eq '${date}'` },
+    queryOptions: { filter: `PartitionKey eq '${date}' and category eq '${category}'` },
   });
   for await (const entity of entities) tasks.push(toTask(entity));
   tasks.sort(
@@ -46,22 +47,25 @@ async function getTasksByDate(date) {
   return tasks;
 }
 
-async function getTasksInRange(start, end) {
+async function getTasksInRange(start, end, category) {
   const tasks = [];
   const entities = tableClient.listEntities({
-    queryOptions: { filter: `PartitionKey ge '${start}' and PartitionKey le '${end}'` },
+    queryOptions: {
+      filter: `PartitionKey ge '${start}' and PartitionKey le '${end}' and category eq '${category}'`,
+    },
   });
   for await (const entity of entities) tasks.push(toTask(entity));
   return tasks;
 }
 
-async function createTask(date, { title, time }) {
+async function createTask(date, { title, time, category }) {
   const now = new Date().toISOString();
   const entity = {
     partitionKey: date,
     rowKey: uuidv4(),
     title,
     time: time || '',
+    category: category || 'personal',
     completed: false,
     createdAt: now,
   };

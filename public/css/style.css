@@ -65,6 +65,44 @@ body {
   padding: 0;
 }
 
+/* Category toggle (Personal / Work) */
+.category-toggle {
+  display: flex;
+  justify-content: center;
+  padding: 12px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.cat-btn {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  padding: 7px 26px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cat-btn:first-child {
+  border-radius: 999px 0 0 999px;
+  border-right: none;
+}
+
+.cat-btn:last-child {
+  border-radius: 0 999px 999px 0;
+}
+
+.cat-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.cat-btn:hover:not(.active) {
+  background: var(--header-bg);
+}
+
 .link-btn:hover {
   color: var(--danger);
 }

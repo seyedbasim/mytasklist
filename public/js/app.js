@@ -19,13 +19,19 @@ function shiftDate(dateStr, delta) {
 }
 
 let currentDate = todayStr();
+let currentCategory = getCategory();
 datePicker.value = currentDate;
 
 async function loadTasks() {
-  const res = await apiFetch(`/api/tasks?date=${currentDate}`);
+  const res = await apiFetch(`/api/tasks?date=${currentDate}&category=${currentCategory}`);
   const tasks = await res.json();
   renderTasks(tasks);
 }
+
+document.addEventListener('categorychange', (e) => {
+  currentCategory = e.detail.category;
+  loadTasks();
+});
 
 function renderTasks(tasks) {
   taskRows.innerHTML = '';
@@ -111,7 +117,7 @@ async function addTask() {
   if (!title) return;
   await apiFetch('/api/tasks', {
     method: 'POST',
-    body: JSON.stringify({ date: currentDate, title, time: timeInput.value }),
+    body: JSON.stringify({ date: currentDate, title, time: timeInput.value, category: currentCategory }),
   });
   titleInput.value = '';
   timeInput.value = '';
