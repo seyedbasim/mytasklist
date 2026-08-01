@@ -17,6 +17,7 @@ function isPrivateIp(ip) {
     v === '::1' ||
     v.startsWith('10.') ||
     v.startsWith('192.168.') ||
+    v.startsWith('169.254.') || // link-local — used by Azure's internal platform/metadata traffic
     /^172\.(1[6-9]|2\d|3[01])\./.test(v)
   );
 }
